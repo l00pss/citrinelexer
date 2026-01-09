@@ -1,6 +1,7 @@
 package citrinelexer
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -8,7 +9,6 @@ import (
 type TokenType int
 
 const (
-	// SQL Keywords
 	SELECT TokenType = iota
 	FROM
 	WHERE
@@ -31,7 +31,6 @@ const (
 	AUTO_INCREMENT
 	UNIQUE
 
-	// SQL Types
 	INT
 	INTEGER
 	VARCHAR
@@ -41,7 +40,6 @@ const (
 	DATETIME
 	TIMESTAMP
 
-	// SQL Functions/Clauses
 	ORDER
 	BY
 	GROUP
@@ -61,7 +59,6 @@ const (
 	MAX
 	MIN
 
-	// Logical Operators
 	AND
 	OR
 	IN
@@ -69,13 +66,11 @@ const (
 	BETWEEN
 	IS
 
-	// Literals
 	IDENTIFIER
 	STRING
 	NUMBER
 	BOOLEAN_LITERAL
 
-	// Operators
 	EQUAL
 	GREATER
 	LESS
@@ -88,7 +83,6 @@ const (
 	DIVIDE
 	MODULO
 
-	// Punctuation
 	SEMICOLON
 	COMMA
 	LPAREN
@@ -96,7 +90,6 @@ const (
 	DOT
 	ASTERISK
 
-	// Special
 	EOF
 	ILLEGAL
 )
@@ -136,6 +129,33 @@ type Token struct {
 	Col   int
 }
 
+func (t Token) String() string {
+	return fmt.Sprintf("Token{%s, '%s', %d:%d}", t.Type.String(), t.Value, t.Line, t.Col)
+}
+
+func (tt TokenType) String() string {
+	switch tt {
+	case SELECT:
+		return "SELECT"
+	case FROM:
+		return "FROM"
+	case WHERE:
+		return "WHERE"
+	case IDENTIFIER:
+		return "IDENTIFIER"
+	case STRING:
+		return "STRING"
+	case NUMBER:
+		return "NUMBER"
+	case EOF:
+		return "EOF"
+	case ILLEGAL:
+		return "ILLEGAL"
+	default:
+		return fmt.Sprintf("TokenType(%d)", int(tt))
+	}
+}
+
 type Lexer struct {
 	input    string
 	position int
@@ -158,7 +178,7 @@ func NewLexer(input string) *Lexer {
 func (l *Lexer) readChar() {
 	l.position = l.readPos
 	if l.readPos >= len(l.input) {
-		l.ch = 0 // EOF
+		l.ch = 0
 		l.readPos++
 		return
 	}
@@ -181,6 +201,23 @@ func (l *Lexer) peekChar() rune {
 	return rune(l.input[l.readPos])
 }
 
+func (l *Lexer) IsAtEnd() bool {
+	return l.ch == 0
+}
+
+func (l *Lexer) GetCurrentPosition() (int, int) {
+	return l.line, l.col
+}
+
+func (l *Lexer) MakeToken(tokenType TokenType, value string) Token {
+	return Token{
+		Type:  tokenType,
+		Value: value,
+		Line:  l.line,
+		Col:   l.col,
+	}
+}
+
 func (l *Lexer) NextToken() Token {
 	var tok Token
 
@@ -190,9 +227,10 @@ func (l *Lexer) NextToken() Token {
 	case '=':
 		if l.peekChar() == '=' {
 			l.readChar()
-			tok = Token{Type: EQUAL, Value: doubleEqualStr, Line: l.line, Col: l.col - 1}
+			tok = l.MakeToken(EQUAL, doubleEqualStr)
+			tok.Col = l.col - 1
 		} else {
-			tok = Token{Type: EQUAL, Value: equalStr, Line: l.line, Col: l.col}
+			tok = l.MakeToken(EQUAL, equalStr)
 		}
 	case '>':
 		if l.peekChar() == '=' {
@@ -256,11 +294,9 @@ func (l *Lexer) NextToken() Token {
 
 func (l *Lexer) skipWhitespace() {
 	for {
-		// Fast path for common ASCII whitespace
 		if l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 			l.readChar()
 		} else if unicode.IsSpace(l.ch) {
-			// Fallback for other unicode whitespace
 			l.readChar()
 		} else {
 			break
@@ -282,7 +318,7 @@ func (l *Lexer) readNumber() string {
 		l.readChar()
 	}
 	if l.ch == '.' && isDigit(l.peekChar()) {
-		l.readChar() // consume '.'
+		l.readChar()
 		for isDigit(l.ch) {
 			l.readChar()
 		}
@@ -298,7 +334,6 @@ func (l *Lexer) readString() string {
 			break
 		}
 	}
-	// Use slice directly instead of creating intermediate string
 	value := l.input[start:l.position]
 	if l.ch == '\'' {
 		l.readChar()
@@ -307,26 +342,20 @@ func (l *Lexer) readString() string {
 }
 
 func isLetter(ch rune) bool {
-	// Fast path for ASCII letters
 	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' {
 		return true
 	}
-	// Fallback to unicode for non-ASCII
 	return unicode.IsLetter(ch)
 }
 
 func isDigit(ch rune) bool {
-	// Fast path for ASCII digits
 	if ch >= '0' && ch <= '9' {
 		return true
 	}
-	// Fallback to unicode for non-ASCII
 	return unicode.IsDigit(ch)
 }
 
-// keywords map is at package level for better performance
 var keywords = map[string]TokenType{
-	// SQL Commands
 	"SELECT":   SELECT,
 	"FROM":     FROM,
 	"WHERE":    WHERE,
@@ -340,7 +369,6 @@ var keywords = map[string]TokenType{
 	"ALTER":    ALTER,
 	"INDEX":    INDEX,
 
-	// Constraints/Keys
 	"PRIMARY":        PRIMARY,
 	"KEY":            KEY,
 	"FOREIGN":        FOREIGN,
@@ -351,7 +379,6 @@ var keywords = map[string]TokenType{
 	"AUTO_INCREMENT": AUTO_INCREMENT,
 	"UNIQUE":         UNIQUE,
 
-	// Data Types
 	"INT":       INT,
 	"INTEGER":   INTEGER,
 	"VARCHAR":   VARCHAR,
@@ -361,7 +388,6 @@ var keywords = map[string]TokenType{
 	"DATETIME":  DATETIME,
 	"TIMESTAMP": TIMESTAMP,
 
-	// Clauses
 	"ORDER":    ORDER,
 	"BY":       BY,
 	"GROUP":    GROUP,
@@ -376,14 +402,12 @@ var keywords = map[string]TokenType{
 	"AS":       AS,
 	"DISTINCT": DISTINCT,
 
-	// Functions
 	"COUNT": COUNT,
 	"SUM":   SUM,
 	"AVG":   AVG,
 	"MAX":   MAX,
 	"MIN":   MIN,
 
-	// Logical
 	"AND":     AND,
 	"OR":      OR,
 	"IN":      IN,
@@ -391,7 +415,6 @@ var keywords = map[string]TokenType{
 	"BETWEEN": BETWEEN,
 	"IS":      IS,
 
-	// Boolean literals
 	"TRUE":  BOOLEAN_LITERAL,
 	"FALSE": BOOLEAN_LITERAL,
 }
@@ -401,4 +424,24 @@ func lookupIdent(ident string) TokenType {
 		return tok
 	}
 	return IDENTIFIER
+}
+
+func (l *Lexer) GetAllTokens() []Token {
+	var tokens []Token
+	for {
+		token := l.NextToken()
+		tokens = append(tokens, token)
+		if token.Type == EOF {
+			break
+		}
+	}
+	return tokens
+}
+
+func (tt TokenType) IsKeyword() bool {
+	return tt >= SELECT && tt <= IS
+}
+
+func (tt TokenType) IsOperator() bool {
+	return tt >= EQUAL && tt <= MODULO
 }
