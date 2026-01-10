@@ -716,22 +716,37 @@ func (l *Lexer) readNumber() string {
 }
 
 func (l *Lexer) readString(delimiter rune) string {
-	start := l.position + 1 // skip opening quote
+	var result strings.Builder
+	l.readChar()
+
 	for {
-		l.readChar()
-		if l.ch == delimiter || l.ch == 0 {
+		if l.ch == 0 {
 			break
 		}
-		// Handle escaped quotes
-		if l.ch == '\\' && l.peekChar() == delimiter {
-			l.readChar() // skip escape character
+
+		if l.ch == delimiter {
+			if l.peekChar() == delimiter {
+				result.WriteRune(l.ch)
+				l.readChar()
+				l.readChar()
+				continue
+			}
+			l.readChar()
+			break
 		}
-	}
-	value := l.input[start:l.position]
-	if l.ch == delimiter {
+
+		if l.ch == '\\' && l.peekChar() == delimiter {
+			l.readChar()
+			result.WriteRune(l.ch)
+			l.readChar()
+			continue
+		}
+
+		result.WriteRune(l.ch)
 		l.readChar()
 	}
-	return value
+
+	return result.String()
 }
 
 func isLetter(ch rune) bool {

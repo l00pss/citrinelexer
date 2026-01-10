@@ -1,13 +1,14 @@
 # Citrine Lexer
 
-A fast and flexible SQL lexer library. Perfect for building your own database engine or SQL parser!
+A fast and flexible SQL lexer and parser library. Perfect for building your own database engine or SQL parser!
 
 ## What does it do?
 
-Breaks SQL code into meaningful pieces (tokens). Like separating a sentence into words.
+Breaks SQL code into tokens and builds Abstract Syntax Trees (AST). Complete lexing and parsing solution.
 
 **Input:** `SELECT name FROM users WHERE id = 123;`
-**Output:** `SELECT`, `name`, `FROM`, `users`, `WHERE`, `id`, `=`, `123`, `;`
+**Lexing:** `SELECT`, `name`, `FROM`, `users`, `WHERE`, `id`, `=`, `123`, `;`
+**Parsing:** AST with SelectStatement node containing fields, table reference, and WHERE clause
 
 ## Features
 
@@ -16,54 +17,22 @@ Breaks SQL code into meaningful pieces (tokens). Like separating a sentence into
 - 💾 **Efficient**: Zero allocation optimizations
 - 📝 **Comprehensive**: Recognizes 100+ SQL keywords
 - 🧪 **Battle-tested**: Extensive test suite
+- 🌳 **AST Support**: Full parsing with `go/ast` interface compatibility
+- 🔀 **Dual Mode**: Use lexer alone or with parser
 
-## Supported SQL Features
+## Architecture
 
-### Database Commands
-```sql
-PRAGMA table_info(users);
-VACUUM;
-EXPLAIN QUERY PLAN SELECT * FROM users;
-ATTACH DATABASE 'backup.db' AS backup;
+```
+SQL String → Lexer → Tokens → Parser → AST
 ```
 
-### Identifier Types
-```sql
-"column name"    -- Double quoted
-[table name]     -- Bracket style
-`field_name`     -- Backtick style
-```
-
-### Parameters
-```sql
-SELECT * FROM users WHERE id = ?;           -- Positional
-SELECT * FROM users WHERE name = :name;     -- Named (:name)
-SELECT * FROM users WHERE age = $age;       -- Named ($age)
-```
-
-### Comments
-```sql
-SELECT * FROM users -- Line comment
-/* Multi-line
-   comment */ WHERE active = 1;
-```
-
-### Numbers
-```sql
-123        -- Integer
-45.67      -- Decimal  
-1.23e-4    -- Scientific notation
-0xFF       -- Hexadecimal
-```
-
-### Operators
-```sql
-name || ' ' || surname  -- String concatenation
-age <> 25              -- Alternative not equal
-```
+You can use:
+- **Lexer only**: For tokenization
+- **Full pipeline**: For complete parsing with AST
 
 ## Quick Start
 
+### Lexer Only
 ```go
 package main
 
@@ -73,11 +42,7 @@ import (
 )
 
 func main() {
-    sql := `SELECT u.name, u.age 
-            FROM users u 
-            WHERE u.id = ? AND u.active = 1;`
-    
-    lexer := citrinelexer.NewLexer(sql)
+    lexer := citrinelexer.NewLexer("SELECT name FROM users")
     
     for {
         token := lexer.NextToken()
@@ -90,53 +55,124 @@ func main() {
 }
 ```
 
-## API
+### Parser + AST
+```go
+package main
 
-### Basic Usage
+import (
+    "fmt"
+    "github.com/l00pss/citrinelexer"
+)
 
+func main() {
+    // Parse SQL into AST
+    stmt, err := citrinelexer.Parse("SELECT name, age FROM users WHERE id > 100")
+    if err != nil {
+        panic(err)
+    }
+
+    // Work with AST
+    selectStmt := stmt.(*citrinelexer.SelectStatement)
+    fmt.Printf("Table: %s\n", selectStmt.From.Name.Name)
+    fmt.Printf("Fields: %d\n", len(selectStmt.Fields))
+    fmt.Printf("Has WHERE: %t\n", selectStmt.Where != nil)
+}
+```
+
+## Supported SQL Features
+
+### Statements
+```sql
+SELECT name, age FROM users WHERE active = 1;
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
+INSERT INTO users VALUES (1, 'John');
+UPDATE users SET name = 'Jane' WHERE id = 1;
+DELETE FROM users WHERE id = 1;
+```
+
+### Database Commands
+```sql
+PRAGMA table_info(users);
+VACUUM;
+EXPLAIN QUERY PLAN SELECT * FROM users;
+ATTACH DATABASE 'backup.db' AS backup;
+```
+
+### Expressions & Functions
+```sql
+SELECT COUNT(*), AVG(age) FROM users;
+SELECT name || ' ' || surname AS full_name FROM users;
+SELECT * FROM users WHERE age BETWEEN 18 AND 65;
+```
+
+### Parameters
+```sql
+SELECT * FROM users WHERE id = ?;           -- Positional
+SELECT * FROM users WHERE name = :name;     -- Named (:name)
+SELECT * FROM users WHERE age = $age;       -- Named ($age)
+```
+
+### Advanced Features
+- Comments (`-- line` and `/* block */`)
+- Quoted identifiers (`"column name"`, `[table name]`, `` `field` ``)
+- Hexadecimal numbers (`0xFF`)
+- Scientific notation (`1.23e-4`)
+- String concatenation (`||`)
+
+## API Reference
+
+### Lexer API
 ```go
 // Create lexer
-lexer := citrinelexer.NewLexer("SELECT * FROM users;")
+lexer := citrinelexer.NewLexer("SELECT * FROM users")
 
-// Get tokens one by one
+// Token by token
 token := lexer.NextToken()
 
-// Get all tokens at once
+// All tokens at once
 tokens := lexer.GetAllTokens()
 
 // Position info
 line, col := lexer.GetCurrentPosition()
 
-// Check if done
+// Status check
 if lexer.IsAtEnd() {
-    fmt.Println("Parsing completed!")
+    // Done
 }
 ```
 
-### Token Types
-
+### Parser API
 ```go
-// Is it a keyword?
-if token.Type.IsKeyword() {
-    fmt.Println("This is a SQL keyword")
-}
+// Parse complete statement
+stmt, err := citrinelexer.Parse("SELECT * FROM users")
 
-// Is it an operator?
-if token.Type.IsOperator() {
-    fmt.Println("This is an operator")
-}
+// Use custom lexer
+lexer := citrinelexer.NewLexer(sql)
+parser := citrinelexer.NewParser(lexer)
+stmt, err := parser.ParseStatement()
 ```
 
-## Testing & Benchmarks
+### AST Nodes
+
+The library provides full AST nodes implementing `go/ast.Node` interface:
+
+- **Statements**: `SelectStatement`, `CreateTableStatement`, `InsertStatement`, `UpdateStatement`, `DeleteStatement`
+- **Expressions**: `Identifier`, `StringLiteral`, `NumberLiteral`, `BinaryExpression`, `FunctionCall`
+- **Parameters**: `Parameter` (for `?` and named parameters)
+
+## Testing
 
 ```bash
-# Run tests
+# Run all tests
 go test -v
 
-# Run benchmarks
+# Run specific tests
+go test -v -run TestParse
+
+# Benchmarks
 go test -bench=.
 
-# Check coverage
+# Coverage
 go test -cover
 ```
 
@@ -150,20 +186,33 @@ BenchmarkSingleCharTokens-10        5115759     237 ns/op      0 B/op     0 allo
 BenchmarkKeywordLookup-10           2361190     521 ns/op      0 B/op     0 allocs/op
 ```
 
-**What this means:**
+**Lexer Performance:**
 - ~450K complex SQL queries per second
-- ~4.2M punctuation tokens per second (zero allocation!)  
+- ~4.2M punctuation tokens per second (zero allocation!)
 - ~1.9M keyword recognition per second (zero allocation!)
+
+**Parser adds minimal overhead** while providing full AST functionality.
 
 ## Project Structure
 
 ```
 citrinelexer/
-├── lexer.go           # Main lexer implementation
-├── lexer_test.go      # Comprehensive tests
+├── lexer.go           # Lexical analysis
+├── parser.go          # Syntax analysis  
+├── ast.go             # AST node definitions
+├── lexer_test.go      # Lexer tests
+├── parser_test.go     # Parser tests
 ├── benchmark_test.go  # Performance tests
 └── example/           # Usage examples
 ```
+
+## Use Cases
+
+- **Database Engines**: SQL query parsing
+- **Code Analysis**: SQL static analysis tools
+- **Query Builders**: Dynamic SQL generation
+- **Migration Tools**: Schema parsing
+- **IDEs**: SQL syntax highlighting and validation
 
 ## License
 
