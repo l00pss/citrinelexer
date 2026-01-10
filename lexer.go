@@ -31,7 +31,6 @@ const (
 	AUTO_INCREMENT
 	UNIQUE
 
-	// SQLite specific keywords
 	DATABASE
 	SCHEMA
 	CONSTRAINT
@@ -590,19 +589,19 @@ func (l *Lexer) NextToken() Token {
 		tok.Col = l.col
 		return tok
 	case '"':
-		tok.Type = IDENTIFIER // SQLite uses double quotes for identifiers
+		tok.Type = IDENTIFIER
 		tok.Value = l.readString('"')
 		tok.Line = l.line
 		tok.Col = l.col
 		return tok
 	case '`':
-		tok.Type = IDENTIFIER // MySQL style backtick identifiers
+		tok.Type = IDENTIFIER
 		tok.Value = l.readString('`')
 		tok.Line = l.line
 		tok.Col = l.col
 		return tok
 	case '[':
-		tok.Type = IDENTIFIER // SQLite bracket identifiers
+		tok.Type = IDENTIFIER
 		tok.Value = l.readBracketIdentifier()
 		tok.Line = l.line
 		tok.Col = l.col
@@ -849,7 +848,6 @@ var keywords = map[string]TokenType{
 	"CONSTRAINT":     CONSTRAINT,
 	"COLLATE":        COLLATE,
 
-	// SQLite specific
 	"DATABASE": DATABASE,
 	"SCHEMA":   SCHEMA,
 	"CASCADE":  CASCADE,
