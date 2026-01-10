@@ -1,5 +1,22 @@
 # Citrine Lexer
 
+<p align="center">
+  <img src="logo.png" alt="Citrine Lexer Logo" width="400">
+</p>
+
+<div align="center">
+  <a href="https://golang.org/"><img src="https://img.shields.io/badge/go-1.21+-00ADD8?style=flat&logo=go&logoColor=white" alt="Go Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License"></a>
+  <a href="https://goreportcard.com/report/github.com/l00pss/citrinelexer"><img src="https://goreportcard.com/badge/github.com/l00pss/citrinelexer" alt="Go Report Card"></a>
+  <a href="https://github.com/l00pss/citrinelexer/stargazers"><img src="https://img.shields.io/github/stars/l00pss/citrinelexer?style=flat&logo=github" alt="GitHub Stars"></a>
+</div>
+
+<div align="center">
+  <a href="https://www.buymeacoffee.com/l00pss" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+</div>
+
+<br>
+
 A fast and flexible SQL lexer and parser library. Perfect for building your own database engine or SQL parser!
 
 ## What does it do?
@@ -12,13 +29,13 @@ Breaks SQL code into tokens and builds Abstract Syntax Trees (AST). Complete lex
 
 ## Features
 
-- 🚀 **Fast**: Processes ~450,000 SQL queries per second
-- 🔧 **Flexible**: Supports different SQL dialects
-- 💾 **Efficient**: Zero allocation optimizations
-- 📝 **Comprehensive**: Recognizes 100+ SQL keywords
-- 🧪 **Battle-tested**: Extensive test suite
-- 🌳 **AST Support**: Full parsing with `go/ast` interface compatibility
-- 🔀 **Dual Mode**: Use lexer alone or with parser
+-  **Fast**: Processes ~450,000 SQL queries per second
+-  **Flexible**: Supports different SQL dialects
+-  **Efficient**: Zero allocation optimizations
+-  **Comprehensive**: Recognizes 100+ SQL keywords
+-  **Battle-tested**: Extensive test suite
+-  **AST Support**: Full parsing with `go/ast` interface compatibility
+-  **Dual Mode**: Use lexer alone or with parser
 
 ## Architecture
 
@@ -192,19 +209,6 @@ BenchmarkKeywordLookup-10           2361190     521 ns/op      0 B/op     0 allo
 - ~1.9M keyword recognition per second (zero allocation!)
 
 **Parser adds minimal overhead** while providing full AST functionality.
-
-## Project Structure
-
-```
-citrinelexer/
-├── lexer.go           # Lexical analysis
-├── parser.go          # Syntax analysis  
-├── ast.go             # AST node definitions
-├── lexer_test.go      # Lexer tests
-├── parser_test.go     # Parser tests
-├── benchmark_test.go  # Performance tests
-└── example/           # Usage examples
-```
 
 ## Use Cases
 
