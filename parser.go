@@ -211,6 +211,29 @@ func (p *Parser) parseColumnDef() (*ColumnDef, error) {
 	if p.isDataType() {
 		col.Type = p.currentToken.Value
 		p.nextToken()
+
+		// Parse length parameter for VARCHAR(n), CHAR(n), etc.
+		if p.currentToken.Type == LPAREN {
+			p.nextToken() // consume (
+			if p.currentToken.Type == NUMBER {
+				col.Length, _ = strconv.Atoi(p.currentToken.Value)
+				p.nextToken()
+
+				// Parse precision and scale for DECIMAL(p,s)
+				if p.currentToken.Type == COMMA {
+					p.nextToken()
+					col.Precision = col.Length
+					col.Length = 0
+					if p.currentToken.Type == NUMBER {
+						col.Scale, _ = strconv.Atoi(p.currentToken.Value)
+						p.nextToken()
+					}
+				}
+			}
+			if !p.expectToken(RPAREN) {
+				return nil, fmt.Errorf("expected )")
+			}
+		}
 	}
 
 	for p.isConstraintKeyword() {
@@ -233,7 +256,8 @@ func (p *Parser) parseInsertStatement() (*InsertStatement, error) {
 		return nil, fmt.Errorf("expected INSERT")
 	}
 
-	if p.currentToken.Type == INSERT {
+	// INTO is optional
+	if p.currentToken.Type == INTO {
 		p.nextToken()
 	}
 
@@ -246,6 +270,61 @@ func (p *Parser) parseInsertStatement() (*InsertStatement, error) {
 		Pos_: token.Pos(p.currentToken.Col),
 	}
 	p.nextToken()
+
+	// Parse column list (optional)
+	if p.currentToken.Type == LPAREN {
+		p.nextToken()
+		for p.currentToken.Type != RPAREN && p.currentToken.Type != EOF {
+			if p.currentToken.Type != IDENTIFIER {
+				return nil, fmt.Errorf("expected column name")
+			}
+			stmt.Columns = append(stmt.Columns, &Identifier{
+				Name: p.currentToken.Value,
+				Pos_: token.Pos(p.currentToken.Col),
+			})
+			p.nextToken()
+			if p.currentToken.Type == COMMA {
+				p.nextToken()
+			}
+		}
+		if !p.expectToken(RPAREN) {
+			return nil, fmt.Errorf("expected )")
+		}
+	}
+
+	// Parse VALUES clause
+	if p.currentToken.Type == VALUES {
+		p.nextToken()
+
+		for {
+			if p.currentToken.Type != LPAREN {
+				return nil, fmt.Errorf("expected (")
+			}
+			p.nextToken()
+
+			var values []Expression
+			for p.currentToken.Type != RPAREN && p.currentToken.Type != EOF {
+				expr, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				values = append(values, expr)
+				if p.currentToken.Type == COMMA {
+					p.nextToken()
+				}
+			}
+			if !p.expectToken(RPAREN) {
+				return nil, fmt.Errorf("expected )")
+			}
+			stmt.Values = append(stmt.Values, values)
+
+			// Multiple value sets: INSERT INTO t VALUES (1), (2), (3)
+			if p.currentToken.Type != COMMA {
+				break
+			}
+			p.nextToken()
+		}
+	}
 
 	return stmt, nil
 }
@@ -268,6 +347,52 @@ func (p *Parser) parseUpdateStatement() (*UpdateStatement, error) {
 		Pos_: token.Pos(p.currentToken.Col),
 	}
 	p.nextToken()
+
+	// Parse SET clause
+	if !p.expectToken(SET) {
+		return nil, fmt.Errorf("expected SET")
+	}
+
+	for {
+		if p.currentToken.Type != IDENTIFIER {
+			return nil, fmt.Errorf("expected column name")
+		}
+
+		col := &Identifier{
+			Name: p.currentToken.Value,
+			Pos_: token.Pos(p.currentToken.Col),
+		}
+		p.nextToken()
+
+		if !p.expectToken(EQUAL) {
+			return nil, fmt.Errorf("expected =")
+		}
+
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.Set = append(stmt.Set, &Assignment{
+			Column: col,
+			Value:  value,
+		})
+
+		if p.currentToken.Type != COMMA {
+			break
+		}
+		p.nextToken()
+	}
+
+	// Parse WHERE clause (optional)
+	if p.currentToken.Type == WHERE {
+		p.nextToken()
+		where, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		stmt.Where = where
+	}
 
 	return stmt, nil
 }

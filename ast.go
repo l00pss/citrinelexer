@@ -168,6 +168,9 @@ type TableRef struct {
 type ColumnDef struct {
 	Name        *Identifier
 	Type        string
+	Length      int // For VARCHAR(n), CHAR(n)
+	Precision   int // For DECIMAL(p,s)
+	Scale       int // For DECIMAL(p,s)
 	Constraints []Constraint
 }
 

@@ -101,9 +101,9 @@ func main() {
 ### Statements
 ```sql
 SELECT name, age FROM users WHERE active = 1;
-CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
-INSERT INTO users VALUES (1, 'John');
-UPDATE users SET name = 'Jane' WHERE id = 1;
+CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR(50) NOT NULL);
+INSERT INTO users (id, name, email) VALUES (1, 'John', 'john@example.com');
+UPDATE users SET name = 'Jane', email = 'jane@example.com' WHERE id = 1;
 DELETE FROM users WHERE id = 1;
 ```
 

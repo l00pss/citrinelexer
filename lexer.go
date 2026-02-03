@@ -13,6 +13,9 @@ const (
 	FROM
 	WHERE
 	INSERT
+	INTO
+	VALUES
+	SET
 	UPDATE
 	DELETE
 	CREATE
@@ -243,6 +246,12 @@ func (tt TokenType) String() string {
 		return "WHERE"
 	case INSERT:
 		return "INSERT"
+	case INTO:
+		return "INTO"
+	case VALUES:
+		return "VALUES"
+	case SET:
+		return "SET"
 	case UPDATE:
 		return "UPDATE"
 	case DELETE:
@@ -824,6 +833,9 @@ var keywords = map[string]TokenType{
 	"FROM":     FROM,
 	"WHERE":    WHERE,
 	"INSERT":   INSERT,
+	"INTO":     INTO,
+	"VALUES":   VALUES,
+	"SET":      SET,
 	"UPDATE":   UPDATE,
 	"DELETE":   DELETE,
 	"CREATE":   CREATE,
