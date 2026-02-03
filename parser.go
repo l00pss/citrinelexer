@@ -79,6 +79,14 @@ func (p *Parser) parseSelectStatement() (*SelectStatement, error) {
 			return nil, err
 		}
 		stmt.From = from
+
+		for p.isJoinKeyword() {
+			join, err := p.parseJoinClause()
+			if err != nil {
+				return nil, err
+			}
+			stmt.Joins = append(stmt.Joins, join)
+		}
 	}
 
 	if p.currentToken.Type == WHERE {
@@ -129,6 +137,23 @@ func (p *Parser) parseSelectFields() ([]Expression, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			// Check for column alias: expr AS alias or expr alias
+			if p.currentToken.Type == AS {
+				pos := token.Pos(p.currentToken.Col)
+				p.nextToken() // skip AS
+				if p.currentToken.Type != IDENTIFIER {
+					return nil, fmt.Errorf("expected alias after AS")
+				}
+				alias := p.currentToken.Value
+				p.nextToken()
+				expr = &AliasedExpression{
+					Expr:  expr,
+					Alias: alias,
+					Pos_:  pos,
+				}
+			}
+
 			fields = append(fields, expr)
 
 			if p.currentToken.Type != COMMA {
@@ -656,6 +681,91 @@ func (p *Parser) parseTableRef() (*TableRef, error) {
 	}
 
 	return table, nil
+}
+
+func (p *Parser) isJoinKeyword() bool {
+	switch p.currentToken.Type {
+	case JOIN, INNER, LEFT, RIGHT, FULL, CROSS:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) parseJoinClause() (*JoinClause, error) {
+	join := &JoinClause{}
+
+	// Determine join type
+	switch p.currentToken.Type {
+	case INNER:
+		join.Type = "INNER"
+		p.nextToken()
+		if p.currentToken.Type != JOIN {
+			return nil, fmt.Errorf("expected JOIN after INNER")
+		}
+		p.nextToken()
+	case LEFT:
+		join.Type = "LEFT"
+		p.nextToken()
+		if p.currentToken.Type == OUTER {
+			p.nextToken()
+		}
+		if p.currentToken.Type != JOIN {
+			return nil, fmt.Errorf("expected JOIN after LEFT")
+		}
+		p.nextToken()
+	case RIGHT:
+		join.Type = "RIGHT"
+		p.nextToken()
+		if p.currentToken.Type == OUTER {
+			p.nextToken()
+		}
+		if p.currentToken.Type != JOIN {
+			return nil, fmt.Errorf("expected JOIN after RIGHT")
+		}
+		p.nextToken()
+	case FULL:
+		join.Type = "FULL"
+		p.nextToken()
+		if p.currentToken.Type == OUTER {
+			p.nextToken()
+		}
+		if p.currentToken.Type != JOIN {
+			return nil, fmt.Errorf("expected JOIN after FULL")
+		}
+		p.nextToken()
+	case CROSS:
+		join.Type = "CROSS"
+		p.nextToken()
+		if p.currentToken.Type != JOIN {
+			return nil, fmt.Errorf("expected JOIN after CROSS")
+		}
+		p.nextToken()
+	case JOIN:
+		join.Type = "INNER" // Default to INNER JOIN
+		p.nextToken()
+	default:
+		return nil, fmt.Errorf("expected JOIN keyword")
+	}
+
+	// Parse table reference
+	table, err := p.parseTableRef()
+	if err != nil {
+		return nil, err
+	}
+	join.Table = table
+
+	// Parse ON condition (not required for CROSS JOIN)
+	if p.currentToken.Type == ON {
+		p.nextToken()
+		condition, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		join.Condition = condition
+	}
+
+	return join, nil
 }
 
 func (p *Parser) parseOrderBy() ([]OrderByItem, error) {

@@ -25,6 +25,7 @@ type SelectStatement struct {
 	Select  token.Pos
 	Fields  []Expression
 	From    *TableRef
+	Joins   []*JoinClause
 	Where   Expression
 	GroupBy []Expression
 	Having  Expression
@@ -164,6 +165,18 @@ func (b *BooleanLiteral) String() string {
 }
 func (b *BooleanLiteral) expressionNode() {}
 
+// AliasedExpression represents "expr AS alias" syntax
+type AliasedExpression struct {
+	Expr  Expression
+	Alias string
+	Pos_  token.Pos
+}
+
+func (a *AliasedExpression) Pos() token.Pos  { return a.Pos_ }
+func (a *AliasedExpression) End() token.Pos  { return token.NoPos }
+func (a *AliasedExpression) String() string  { return a.Expr.String() + " AS " + a.Alias }
+func (a *AliasedExpression) expressionNode() {}
+
 type BinaryExpression struct {
 	Left     Expression
 	Operator string
@@ -216,6 +229,13 @@ func (q *QualifiedIdentifier) expressionNode() {}
 type TableRef struct {
 	Name  *Identifier
 	Alias *Identifier
+}
+
+// JoinClause represents a JOIN in SELECT statement
+type JoinClause struct {
+	Type      string // INNER, LEFT, RIGHT, FULL, CROSS
+	Table     *TableRef
+	Condition Expression // ON condition
 }
 
 type ColumnDef struct {

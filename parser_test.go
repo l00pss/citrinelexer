@@ -878,3 +878,113 @@ func TestTransactionStatements(t *testing.T) {
 		})
 	}
 }
+
+func TestColumnAlias(t *testing.T) {
+	tests := []struct {
+		name  string
+		sql   string
+		table string
+	}{
+		{"count with alias", "SELECT COUNT(*) as total_users FROM users", "users"},
+		{"count with AS alias", "SELECT COUNT(*) AS total FROM users", "users"},
+		{"sum with alias", "SELECT SUM(amount) as total_revenue FROM orders", "orders"},
+		{"simple column alias", "SELECT name as n FROM users", "users"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.From == nil {
+				t.Fatal("FROM clause is nil - AS alias broke FROM parsing")
+			}
+
+			if selectStmt.From.Name.Name != tt.table {
+				t.Fatalf("Expected table %q, got %q", tt.table, selectStmt.From.Name.Name)
+			}
+		})
+	}
+}
+
+func TestJoinClause(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		joinType  string
+		joinTable string
+		joinAlias string
+	}{
+		{
+			name:      "inner join with alias",
+			sql:       "SELECT u.id, o.amount FROM users u INNER JOIN orders o ON u.id = o.user_id",
+			joinType:  "INNER",
+			joinTable: "orders",
+			joinAlias: "o",
+		},
+		{
+			name:      "left join",
+			sql:       "SELECT u.name, d.name FROM users u LEFT JOIN departments d ON u.dept_id = d.id",
+			joinType:  "LEFT",
+			joinTable: "departments",
+			joinAlias: "d",
+		},
+		{
+			name:      "simple join",
+			sql:       "SELECT * FROM users JOIN orders ON users.id = orders.user_id",
+			joinType:  "INNER",
+			joinTable: "orders",
+			joinAlias: "",
+		},
+		{
+			name:      "right join",
+			sql:       "SELECT * FROM users u RIGHT JOIN orders o ON u.id = o.user_id",
+			joinType:  "RIGHT",
+			joinTable: "orders",
+			joinAlias: "o",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.From == nil {
+				t.Fatal("FROM clause is nil")
+			}
+
+			if len(selectStmt.Joins) == 0 {
+				t.Fatal("Expected at least one JOIN clause")
+			}
+
+			join := selectStmt.Joins[0]
+			if join.Type != tt.joinType {
+				t.Fatalf("Expected join type %q, got %q", tt.joinType, join.Type)
+			}
+
+			if join.Table.Name.Name != tt.joinTable {
+				t.Fatalf("Expected join table %q, got %q", tt.joinTable, join.Table.Name.Name)
+			}
+
+			if tt.joinAlias != "" {
+				if join.Table.Alias == nil {
+					t.Fatalf("Expected join alias %q, got nil", tt.joinAlias)
+				}
+				if join.Table.Alias.Name != tt.joinAlias {
+					t.Fatalf("Expected join alias %q, got %q", tt.joinAlias, join.Table.Alias.Name)
+				}
+			}
+
+			if join.Condition == nil {
+				t.Fatal("Expected ON condition")
+			}
+		})
+	}
+}
