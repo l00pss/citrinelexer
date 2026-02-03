@@ -142,7 +142,8 @@ func (p *Parser) parseSelectFields() ([]Expression, error) {
 			if p.currentToken.Type == AS {
 				pos := token.Pos(p.currentToken.Col)
 				p.nextToken() // skip AS
-				if p.currentToken.Type != IDENTIFIER {
+				// Allow keywords (COUNT, SUM, etc.) as aliases too
+				if p.currentToken.Type != IDENTIFIER && !p.isValidAliasToken() {
 					return nil, fmt.Errorf("expected alias after AS")
 				}
 				alias := p.currentToken.Value
@@ -871,6 +872,27 @@ func (p *Parser) isConstraintKeyword() bool {
 func (p *Parser) isComparisonOperator() bool {
 	switch p.currentToken.Type {
 	case EQUAL, NOT_EQUAL, NOT_EQUAL2, GREATER, LESS, GREATER_EQUAL, LESS_EQUAL, LIKE:
+		return true
+	default:
+		return false
+	}
+}
+
+// isValidAliasToken returns true if current token can be used as an alias
+// This includes IDENTIFIER and common keywords that users might want as aliases
+func (p *Parser) isValidAliasToken() bool {
+	switch p.currentToken.Type {
+	case IDENTIFIER,
+		// Aggregate function names commonly used as aliases
+		COUNT, SUM, AVG, MIN, MAX,
+		// Other common words that might be used as aliases
+		TEXT, INTEGER, REAL, BOOLEAN,
+		// Query-related words
+		ORDER, GROUP, LIMIT, OFFSET,
+		// Value-related
+		TRUE, FALSE, NULL,
+		// Type names
+		INT, CHAR, VARCHAR, BLOB, DATETIME, TIMESTAMP:
 		return true
 	default:
 		return false

@@ -988,3 +988,42 @@ func TestJoinClause(t *testing.T) {
 		})
 	}
 }
+
+func TestKeywordAsAlias(t *testing.T) {
+	tests := []struct {
+		name  string
+		sql   string
+		alias string
+	}{
+		{"count as alias", "SELECT COUNT(*) as count FROM users", "count"},
+		{"sum as alias", "SELECT SUM(amount) as sum FROM orders", "sum"},
+		{"avg as alias", "SELECT AVG(price) as avg FROM items", "avg"},
+		{"min as alias", "SELECT MIN(age) as min FROM users", "min"},
+		{"max as alias", "SELECT MAX(age) as max FROM users", "max"},
+		{"text as alias", "SELECT name as text FROM users", "text"},
+		{"integer as alias", "SELECT id as integer FROM users", "integer"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if len(selectStmt.Fields) == 0 {
+				t.Fatal("Expected at least one field")
+			}
+
+			aliased, ok := selectStmt.Fields[0].(*AliasedExpression)
+			if !ok {
+				t.Fatalf("Expected AliasedExpression, got %T", selectStmt.Fields[0])
+			}
+
+			if aliased.Alias != tt.alias {
+				t.Fatalf("Expected alias %q, got %q", tt.alias, aliased.Alias)
+			}
+		})
+	}
+}
