@@ -46,6 +46,12 @@ func (p *Parser) ParseStatement() (Statement, error) {
 		return p.parseUpdateStatement()
 	case DELETE:
 		return p.parseDeleteStatement()
+	case BEGIN:
+		return p.parseBeginStatement()
+	case COMMIT:
+		return p.parseCommitStatement()
+	case ROLLBACK:
+		return p.parseRollbackStatement()
 	default:
 		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
 	}
@@ -432,6 +438,36 @@ func (p *Parser) parseDeleteStatement() (*DeleteStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseBeginStatement() (*BeginStatement, error) {
+	stmt := &BeginStatement{
+		Begin: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken() // skip BEGIN
+
+	// TRANSACTION is optional
+	if p.currentToken.Type == TRANSACTION {
+		p.nextToken()
+	}
+
+	return stmt, nil
+}
+
+func (p *Parser) parseCommitStatement() (*CommitStatement, error) {
+	stmt := &CommitStatement{
+		Commit: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken() // skip COMMIT
+	return stmt, nil
+}
+
+func (p *Parser) parseRollbackStatement() (*RollbackStatement, error) {
+	stmt := &RollbackStatement{
+		Rollback: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken() // skip ROLLBACK
+	return stmt, nil
+}
+
 func (p *Parser) parseExpression() (Expression, error) {
 	return p.parseComparison()
 }
@@ -473,11 +509,16 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		pos = token.Pos(p.currentToken.Col)
 		p.nextToken() // Advance past the identifier
 
+		// Handle function call: COUNT(*), SUM(col), etc.
 		if p.currentToken.Type == LPAREN {
 			p.nextToken()
 			args := []Expression{}
 
-			if p.currentToken.Type != RPAREN {
+			// Handle COUNT(*) special case
+			if p.currentToken.Type == ASTERISK {
+				args = append(args, &Identifier{Name: "*", Pos_: token.Pos(p.currentToken.Col)})
+				p.nextToken()
+			} else if p.currentToken.Type != RPAREN {
 				for {
 					arg, err := p.parseExpression()
 					if err != nil {
@@ -501,6 +542,30 @@ func (p *Parser) parsePrimary() (Expression, error) {
 				Args: args,
 				Pos_: pos,
 			}, nil
+		}
+
+		// Handle qualified identifier: table.column or table.*
+		if p.currentToken.Type == DOT {
+			p.nextToken() // skip .
+			if p.currentToken.Type == ASTERISK {
+				// table.*
+				p.nextToken()
+				return &QualifiedAsterisk{
+					Table: name,
+					Pos_:  pos,
+				}, nil
+			} else if p.currentToken.Type == IDENTIFIER {
+				// table.column
+				colName := p.currentToken.Value
+				p.nextToken()
+				return &QualifiedIdentifier{
+					Table:  name,
+					Column: colName,
+					Pos_:   pos,
+				}, nil
+			} else {
+				return nil, fmt.Errorf("expected column name or * after .")
+			}
 		}
 
 		return &Identifier{
@@ -570,11 +635,19 @@ func (p *Parser) parseTableRef() (*TableRef, error) {
 	}
 	p.nextToken()
 
+	// Handle alias: "table AS alias" or "table alias"
 	if p.currentToken.Type == AS {
 		p.nextToken()
 		if p.currentToken.Type != IDENTIFIER {
 			return nil, fmt.Errorf("expected alias after AS")
 		}
+		table.Alias = &Identifier{
+			Name: p.currentToken.Value,
+			Pos_: token.Pos(p.currentToken.Col),
+		}
+		p.nextToken()
+	} else if p.currentToken.Type == IDENTIFIER && !p.isReservedKeyword() {
+		// Alias without AS keyword: "users u"
 		table.Alias = &Identifier{
 			Name: p.currentToken.Value,
 			Pos_: token.Pos(p.currentToken.Col),
@@ -688,6 +761,22 @@ func (p *Parser) isConstraintKeyword() bool {
 func (p *Parser) isComparisonOperator() bool {
 	switch p.currentToken.Type {
 	case EQUAL, NOT_EQUAL, NOT_EQUAL2, GREATER, LESS, GREATER_EQUAL, LESS_EQUAL, LIKE:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) isReservedKeyword() bool {
+	switch p.currentToken.Type {
+	case SELECT, FROM, WHERE, INSERT, INTO, VALUES, UPDATE, SET, DELETE,
+		CREATE, TABLE, DROP, ALTER, INDEX, PRIMARY, KEY, FOREIGN, REFERENCES,
+		NOT, NULL, DEFAULT, UNIQUE, CHECK, CONSTRAINT,
+		ORDER, BY, GROUP, HAVING, LIMIT, OFFSET,
+		INNER, LEFT, RIGHT, FULL, OUTER, CROSS, JOIN, ON, AS,
+		AND, OR, IN, LIKE, BETWEEN, IS, EXISTS,
+		BEGIN, COMMIT, ROLLBACK, TRANSACTION,
+		TRUE, FALSE:
 		return true
 	default:
 		return false

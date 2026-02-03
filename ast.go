@@ -88,6 +88,36 @@ func (d *DeleteStatement) End() token.Pos { return token.NoPos }
 func (d *DeleteStatement) String() string { return "DELETE" }
 func (d *DeleteStatement) statementNode() {}
 
+// BEGIN statement
+type BeginStatement struct {
+	Begin token.Pos
+}
+
+func (b *BeginStatement) Pos() token.Pos { return b.Begin }
+func (b *BeginStatement) End() token.Pos { return token.NoPos }
+func (b *BeginStatement) String() string { return "BEGIN" }
+func (b *BeginStatement) statementNode() {}
+
+// COMMIT statement
+type CommitStatement struct {
+	Commit token.Pos
+}
+
+func (c *CommitStatement) Pos() token.Pos { return c.Commit }
+func (c *CommitStatement) End() token.Pos { return token.NoPos }
+func (c *CommitStatement) String() string { return "COMMIT" }
+func (c *CommitStatement) statementNode() {}
+
+// ROLLBACK statement
+type RollbackStatement struct {
+	Rollback token.Pos
+}
+
+func (r *RollbackStatement) Pos() token.Pos { return r.Rollback }
+func (r *RollbackStatement) End() token.Pos { return token.NoPos }
+func (r *RollbackStatement) String() string { return "ROLLBACK" }
+func (r *RollbackStatement) statementNode() {}
+
 // Expressions
 type Identifier struct {
 	Name string
@@ -158,6 +188,29 @@ func (f *FunctionCall) Pos() token.Pos  { return f.Pos_ }
 func (f *FunctionCall) End() token.Pos  { return token.NoPos }
 func (f *FunctionCall) String() string  { return f.Name + "()" }
 func (f *FunctionCall) expressionNode() {}
+
+// QualifiedAsterisk represents table.* syntax
+type QualifiedAsterisk struct {
+	Table string
+	Pos_  token.Pos
+}
+
+func (q *QualifiedAsterisk) Pos() token.Pos  { return q.Pos_ }
+func (q *QualifiedAsterisk) End() token.Pos  { return token.NoPos }
+func (q *QualifiedAsterisk) String() string  { return q.Table + ".*" }
+func (q *QualifiedAsterisk) expressionNode() {}
+
+// QualifiedIdentifier represents table.column syntax
+type QualifiedIdentifier struct {
+	Table  string
+	Column string
+	Pos_   token.Pos
+}
+
+func (q *QualifiedIdentifier) Pos() token.Pos  { return q.Pos_ }
+func (q *QualifiedIdentifier) End() token.Pos  { return token.NoPos }
+func (q *QualifiedIdentifier) String() string  { return q.Table + "." + q.Column }
+func (q *QualifiedIdentifier) expressionNode() {}
 
 // Supporting types
 type TableRef struct {

@@ -719,3 +719,162 @@ func TestDebugWhereClause(t *testing.T) {
 		t.Fatalf("Expected right.Value='Male', got %q", right.Value)
 	}
 }
+
+func TestTableAlias(t *testing.T) {
+	tests := []struct {
+		name  string
+		sql   string
+		table string
+		alias string
+	}{
+		{"alias without AS", "SELECT * FROM users u", "users", "u"},
+		{"alias with AS", "SELECT * FROM users AS u", "users", "u"},
+		{"alias for orders", "SELECT * FROM orders o", "orders", "o"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.From == nil {
+				t.Fatal("Expected FROM clause")
+			}
+
+			if selectStmt.From.Name.Name != tt.table {
+				t.Fatalf("Expected table %q, got %q", tt.table, selectStmt.From.Name.Name)
+			}
+
+			if selectStmt.From.Alias == nil {
+				t.Fatalf("Expected alias %q, got nil", tt.alias)
+			}
+
+			if selectStmt.From.Alias.Name != tt.alias {
+				t.Fatalf("Expected alias %q, got %q", tt.alias, selectStmt.From.Alias.Name)
+			}
+		})
+	}
+}
+
+func TestCountStar(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{"count star", "SELECT COUNT(*) FROM users"},
+		{"count star with where", "SELECT COUNT(*) FROM users WHERE gender = 'Male'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if len(selectStmt.Fields) != 1 {
+				t.Fatalf("Expected 1 field, got %d", len(selectStmt.Fields))
+			}
+
+			fn, ok := selectStmt.Fields[0].(*FunctionCall)
+			if !ok {
+				t.Fatalf("Expected FunctionCall, got %T", selectStmt.Fields[0])
+			}
+
+			if fn.Name != "COUNT" {
+				t.Fatalf("Expected function name COUNT, got %s", fn.Name)
+			}
+
+			if len(fn.Args) != 1 {
+				t.Fatalf("Expected 1 argument, got %d", len(fn.Args))
+			}
+
+			// Check that arg is * identifier
+			ident, ok := fn.Args[0].(*Identifier)
+			if !ok {
+				t.Fatalf("Expected Identifier for *, got %T", fn.Args[0])
+			}
+			if ident.Name != "*" {
+				t.Fatalf("Expected * argument, got %s", ident.Name)
+			}
+		})
+	}
+}
+
+func TestQualifiedAsterisk(t *testing.T) {
+	sql := "SELECT users.* FROM users"
+	stmt, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	selectStmt := stmt.(*SelectStatement)
+	if len(selectStmt.Fields) != 1 {
+		t.Fatalf("Expected 1 field, got %d", len(selectStmt.Fields))
+	}
+
+	qa, ok := selectStmt.Fields[0].(*QualifiedAsterisk)
+	if !ok {
+		t.Fatalf("Expected QualifiedAsterisk, got %T", selectStmt.Fields[0])
+	}
+
+	if qa.Table != "users" {
+		t.Fatalf("Expected table 'users', got %q", qa.Table)
+	}
+}
+
+func TestQualifiedIdentifier(t *testing.T) {
+	sql := "SELECT u.first_name FROM users u"
+	stmt, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	selectStmt := stmt.(*SelectStatement)
+	if len(selectStmt.Fields) != 1 {
+		t.Fatalf("Expected 1 field, got %d", len(selectStmt.Fields))
+	}
+
+	qi, ok := selectStmt.Fields[0].(*QualifiedIdentifier)
+	if !ok {
+		t.Fatalf("Expected QualifiedIdentifier, got %T", selectStmt.Fields[0])
+	}
+
+	if qi.Table != "u" {
+		t.Fatalf("Expected table 'u', got %q", qi.Table)
+	}
+
+	if qi.Column != "first_name" {
+		t.Fatalf("Expected column 'first_name', got %q", qi.Column)
+	}
+}
+
+func TestTransactionStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		stmtType string
+	}{
+		{"begin", "BEGIN", "BEGIN"},
+		{"begin transaction", "BEGIN TRANSACTION", "BEGIN"},
+		{"commit", "COMMIT", "COMMIT"},
+		{"rollback", "ROLLBACK", "ROLLBACK"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			if stmt.String() != tt.stmtType {
+				t.Fatalf("Expected %s, got %s", tt.stmtType, stmt.String())
+			}
+		})
+	}
+}
