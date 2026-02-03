@@ -471,6 +471,7 @@ func (p *Parser) parsePrimary() (Expression, error) {
 	case IDENTIFIER, COUNT, SUM, AVG, MIN, MAX:
 		name = p.currentToken.Value
 		pos = token.Pos(p.currentToken.Col)
+		p.nextToken() // Advance past the identifier
 
 		if p.currentToken.Type == LPAREN {
 			p.nextToken()

@@ -641,3 +641,81 @@ func TestSQLFileExamples(t *testing.T) {
 		})
 	}
 }
+
+func TestParseWhereClause(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		operator string
+	}{
+		{"equals string", "SELECT * FROM t WHERE name = 'Alice'", "="},
+		{"equals number", "SELECT * FROM t WHERE id = 1", "="},
+		{"not equals", "SELECT * FROM t WHERE id != 1", "!="},
+		{"greater than", "SELECT * FROM t WHERE age > 18", ">"},
+		{"less than", "SELECT * FROM t WHERE age < 65", "<"},
+		{"greater or equal", "SELECT * FROM t WHERE age >= 18", ">="},
+		{"less or equal", "SELECT * FROM t WHERE age <= 65", "<="},
+		{"LIKE pattern", "SELECT * FROM t WHERE name LIKE 'A%'", "LIKE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.Where == nil {
+				t.Fatal("Expected WHERE clause")
+			}
+
+			be, ok := selectStmt.Where.(*BinaryExpression)
+			if !ok {
+				t.Fatalf("Expected BinaryExpression, got %T", selectStmt.Where)
+			}
+
+			if be.Operator != tt.operator {
+				t.Fatalf("Expected operator %q, got %q", tt.operator, be.Operator)
+			}
+		})
+	}
+}
+
+func TestDebugWhereClause(t *testing.T) {
+	sql := "SELECT * FROM users WHERE gender = 'Male'"
+	stmt, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	sel := stmt.(*SelectStatement)
+
+	be, ok := sel.Where.(*BinaryExpression)
+	if !ok {
+		t.Fatalf("Expected BinaryExpression, got %T", sel.Where)
+	}
+
+	// Check left side is Identifier
+	left, ok := be.Left.(*Identifier)
+	if !ok {
+		t.Fatalf("Expected left to be Identifier, got %T", be.Left)
+	}
+	if left.Name != "gender" {
+		t.Fatalf("Expected left.Name='gender', got %q", left.Name)
+	}
+
+	// Check operator
+	if be.Operator != "=" {
+		t.Fatalf("Expected operator '=', got %q", be.Operator)
+	}
+
+	// Check right side is StringLiteral
+	right, ok := be.Right.(*StringLiteral)
+	if !ok {
+		t.Fatalf("Expected right to be StringLiteral, got %T", be.Right)
+	}
+	if right.Value != "Male" {
+		t.Fatalf("Expected right.Value='Male', got %q", right.Value)
+	}
+}
