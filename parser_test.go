@@ -1027,3 +1027,46 @@ func TestKeywordAsAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestNullLiteral(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{"select null", "SELECT NULL"},
+		{"insert with null", "INSERT INTO users (name, email) VALUES ('John', NULL)"},
+		{"select null alias", "SELECT NULL as empty FROM users"},
+		{"null in where", "SELECT * FROM users WHERE email = NULL"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+		})
+	}
+
+	// Test that NullLiteral is correctly parsed
+	t.Run("verify null literal type", func(t *testing.T) {
+		stmt, err := Parse("SELECT NULL")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+
+		selectStmt := stmt.(*SelectStatement)
+		if len(selectStmt.Fields) == 0 {
+			t.Fatal("Expected at least one field")
+		}
+
+		nullLit, ok := selectStmt.Fields[0].(*NullLiteral)
+		if !ok {
+			t.Fatalf("Expected NullLiteral, got %T", selectStmt.Fields[0])
+		}
+
+		if nullLit.String() != "NULL" {
+			t.Fatalf("Expected 'NULL', got %q", nullLit.String())
+		}
+	})
+}

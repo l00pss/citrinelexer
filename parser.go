@@ -626,6 +626,13 @@ func (p *Parser) parsePrimary() (Expression, error) {
 			Pos_:  pos,
 		}, nil
 
+	case NULL:
+		pos := token.Pos(p.currentToken.Col)
+		p.nextToken()
+		return &NullLiteral{
+			Pos_: pos,
+		}, nil
+
 	case PARAMETER:
 		pos := token.Pos(p.currentToken.Col)
 		p.nextToken()

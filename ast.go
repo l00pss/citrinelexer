@@ -165,6 +165,16 @@ func (b *BooleanLiteral) String() string {
 }
 func (b *BooleanLiteral) expressionNode() {}
 
+// NullLiteral represents a NULL value
+type NullLiteral struct {
+	Pos_ token.Pos
+}
+
+func (n *NullLiteral) Pos() token.Pos  { return n.Pos_ }
+func (n *NullLiteral) End() token.Pos  { return token.NoPos }
+func (n *NullLiteral) String() string  { return "NULL" }
+func (n *NullLiteral) expressionNode() {}
+
 // AliasedExpression represents "expr AS alias" syntax
 type AliasedExpression struct {
 	Expr  Expression
