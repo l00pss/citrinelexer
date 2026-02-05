@@ -1666,3 +1666,176 @@ func TestFullOuterJoin(t *testing.T) {
 		})
 	}
 }
+
+func TestLogicalOperators(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "simple AND",
+			sql:  "SELECT * FROM users WHERE age > 18 AND status = 1",
+		},
+		{
+			name: "simple OR",
+			sql:  "SELECT * FROM users WHERE status = 1 OR status = 2",
+		},
+		{
+			name: "AND with OR",
+			sql:  "SELECT * FROM users WHERE age > 18 AND status = 1 OR role = 'admin'",
+		},
+		{
+			name: "multiple AND",
+			sql:  "SELECT * FROM users WHERE age > 18 AND status = 1 AND role = 'user'",
+		},
+		{
+			name: "multiple OR",
+			sql:  "SELECT * FROM users WHERE status = 1 OR status = 2 OR status = 3",
+		},
+		{
+			name: "BETWEEN with AND",
+			sql:  "SELECT * FROM users WHERE age BETWEEN 20 AND 30 AND status = 1",
+		},
+		{
+			name: "IN with AND",
+			sql:  "SELECT * FROM users WHERE id IN (1, 2, 3) AND status = 1",
+		},
+		{
+			name: "IN with OR",
+			sql:  "SELECT * FROM users WHERE id IN (1, 2) OR id IN (5, 6)",
+		},
+		{
+			name: "BETWEEN with OR",
+			sql:  "SELECT * FROM users WHERE age BETWEEN 20 AND 30 OR age BETWEEN 50 AND 60",
+		},
+		{
+			name: "complex BETWEEN AND combination",
+			sql:  "SELECT * FROM orders WHERE amount BETWEEN 100 AND 500 AND status = 'active' AND user_id = 1",
+		},
+		{
+			name: "LIKE with AND",
+			sql:  "SELECT * FROM users WHERE name LIKE '%john%' AND email LIKE '%@gmail.com'",
+		},
+		{
+			name: "NOT IN with AND",
+			sql:  "SELECT * FROM users WHERE id NOT IN (1, 2) AND status = 1",
+		},
+		{
+			name: "NOT BETWEEN with AND",
+			sql:  "SELECT * FROM users WHERE age NOT BETWEEN 0 AND 18 AND status = 'active'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt, ok := stmt.(*SelectStatement)
+			if !ok {
+				t.Fatalf("Expected SelectStatement, got %T", stmt)
+			}
+
+			if selectStmt.Where == nil {
+				t.Fatal("Expected WHERE clause")
+			}
+		})
+	}
+
+	// Verify BETWEEN AND doesn't conflict with logical AND
+	t.Run("verify BETWEEN AND structure", func(t *testing.T) {
+		stmt, err := Parse("SELECT * FROM users WHERE age BETWEEN 20 AND 30 AND status = 1")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+
+		selectStmt := stmt.(*SelectStatement)
+
+		// The top level should be a BinaryExpression with AND operator
+		binExpr, ok := selectStmt.Where.(*BinaryExpression)
+		if !ok {
+			t.Fatalf("Expected BinaryExpression at top level, got %T", selectStmt.Where)
+		}
+
+		if binExpr.Operator != "AND" {
+			t.Errorf("Expected top level operator 'AND', got %q", binExpr.Operator)
+		}
+
+		// Left side should be BetweenExpression
+		_, ok = binExpr.Left.(*BetweenExpression)
+		if !ok {
+			t.Errorf("Expected BetweenExpression on left side, got %T", binExpr.Left)
+		}
+
+		// Right side should be BinaryExpression (status = 1)
+		rightBin, ok := binExpr.Right.(*BinaryExpression)
+		if !ok {
+			t.Errorf("Expected BinaryExpression on right side, got %T", binExpr.Right)
+		}
+
+		if rightBin.Operator != "=" {
+			t.Errorf("Expected right side operator '=', got %q", rightBin.Operator)
+		}
+	})
+
+	// Verify IN AND combination
+	t.Run("verify IN AND structure", func(t *testing.T) {
+		stmt, err := Parse("SELECT * FROM users WHERE id IN (1, 2, 3) AND name = 'test'")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+
+		selectStmt := stmt.(*SelectStatement)
+
+		binExpr, ok := selectStmt.Where.(*BinaryExpression)
+		if !ok {
+			t.Fatalf("Expected BinaryExpression at top level, got %T", selectStmt.Where)
+		}
+
+		if binExpr.Operator != "AND" {
+			t.Errorf("Expected top level operator 'AND', got %q", binExpr.Operator)
+		}
+
+		// Left side should be InExpression
+		inExpr, ok := binExpr.Left.(*InExpression)
+		if !ok {
+			t.Errorf("Expected InExpression on left side, got %T", binExpr.Left)
+		}
+
+		if len(inExpr.Values) != 3 {
+			t.Errorf("Expected 3 values in IN expression, got %d", len(inExpr.Values))
+		}
+	})
+
+	// Verify OR precedence
+	t.Run("verify OR precedence", func(t *testing.T) {
+		stmt, err := Parse("SELECT * FROM users WHERE a = 1 AND b = 2 OR c = 3")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+
+		selectStmt := stmt.(*SelectStatement)
+
+		// Top level should be OR (lower precedence)
+		binExpr, ok := selectStmt.Where.(*BinaryExpression)
+		if !ok {
+			t.Fatalf("Expected BinaryExpression at top level, got %T", selectStmt.Where)
+		}
+
+		if binExpr.Operator != "OR" {
+			t.Errorf("Expected top level operator 'OR', got %q", binExpr.Operator)
+		}
+
+		// Left side of OR should be AND expression
+		leftAnd, ok := binExpr.Left.(*BinaryExpression)
+		if !ok {
+			t.Errorf("Expected BinaryExpression on left side of OR, got %T", binExpr.Left)
+		}
+
+		if leftAnd.Operator != "AND" {
+			t.Errorf("Expected left side operator 'AND', got %q", leftAnd.Operator)
+		}
+	})
+}

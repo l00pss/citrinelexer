@@ -666,7 +666,59 @@ func (p *Parser) parseDropIndexStatement(pos token.Pos) (*DropIndexStatement, er
 }
 
 func (p *Parser) parseExpression() (Expression, error) {
-	return p.parseComparison()
+	return p.parseLogicalOr()
+}
+
+func (p *Parser) parseLogicalOr() (Expression, error) {
+	left, err := p.parseLogicalAnd()
+	if err != nil {
+		return nil, err
+	}
+
+	for p.currentToken.Type == OR {
+		pos := token.Pos(p.currentToken.Col)
+		p.nextToken()
+
+		right, err := p.parseLogicalAnd()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &BinaryExpression{
+			Left:     left,
+			Operator: "OR",
+			Right:    right,
+			Pos_:     pos,
+		}
+	}
+
+	return left, nil
+}
+
+func (p *Parser) parseLogicalAnd() (Expression, error) {
+	left, err := p.parseComparison()
+	if err != nil {
+		return nil, err
+	}
+
+	for p.currentToken.Type == AND {
+		pos := token.Pos(p.currentToken.Col)
+		p.nextToken()
+
+		right, err := p.parseComparison()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &BinaryExpression{
+			Left:     left,
+			Operator: "AND",
+			Right:    right,
+			Pos_:     pos,
+		}
+	}
+
+	return left, nil
 }
 
 func (p *Parser) parseComparison() (Expression, error) {
