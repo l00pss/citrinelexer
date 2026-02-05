@@ -79,6 +79,8 @@ const (
 	// Query clauses
 	ORDER
 	BY
+	ASC
+	DESC
 	GROUP
 	HAVING
 	LIMIT
@@ -136,6 +138,7 @@ const (
 	ISNULL
 	NOTNULL
 	EXISTS
+	IF
 
 	// Transaction
 	BEGIN
@@ -308,6 +311,8 @@ func (tt TokenType) String() string {
 		return "IS"
 	case EXISTS:
 		return "EXISTS"
+	case IF:
+		return "IF"
 	case CASE:
 		return "CASE"
 	case WHEN:
@@ -322,6 +327,10 @@ func (tt TokenType) String() string {
 		return "ORDER"
 	case BY:
 		return "BY"
+	case ASC:
+		return "ASC"
+	case DESC:
+		return "DESC"
 	case GROUP:
 		return "GROUP"
 	case HAVING:
@@ -899,6 +908,8 @@ var keywords = map[string]TokenType{
 	// Query clauses
 	"ORDER":     ORDER,
 	"BY":        BY,
+	"ASC":       ASC,
+	"DESC":      DESC,
 	"GROUP":     GROUP,
 	"HAVING":    HAVING,
 	"LIMIT":     LIMIT,
@@ -956,6 +967,7 @@ var keywords = map[string]TokenType{
 	"ISNULL":  ISNULL,
 	"NOTNULL": NOTNULL,
 	"EXISTS":  EXISTS,
+	"IF":      IF,
 
 	// Transaction
 	"BEGIN":       BEGIN,

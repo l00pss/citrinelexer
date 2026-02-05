@@ -22,15 +22,16 @@ type Expression interface {
 
 // SELECT statement
 type SelectStatement struct {
-	Select  token.Pos
-	Fields  []Expression
-	From    *TableRef
-	Joins   []*JoinClause
-	Where   Expression
-	GroupBy []Expression
-	Having  Expression
-	OrderBy []OrderByItem
-	Limit   *LimitClause
+	Select   token.Pos
+	Distinct bool
+	Fields   []Expression
+	From     *TableRef
+	Joins    []*JoinClause
+	Where    Expression
+	GroupBy  []Expression
+	Having   Expression
+	OrderBy  []OrderByItem
+	Limit    *LimitClause
 }
 
 func (s *SelectStatement) Pos() token.Pos { return s.Select }
@@ -119,6 +120,44 @@ func (r *RollbackStatement) End() token.Pos { return token.NoPos }
 func (r *RollbackStatement) String() string { return "ROLLBACK" }
 func (r *RollbackStatement) statementNode() {}
 
+// CREATE INDEX statement
+type CreateIndexStatement struct {
+	Create      token.Pos
+	Unique      bool
+	Name        *Identifier
+	Table       *Identifier
+	Columns     []*IndexColumn
+	IfNotExists bool
+}
+
+func (c *CreateIndexStatement) Pos() token.Pos { return c.Create }
+func (c *CreateIndexStatement) End() token.Pos { return token.NoPos }
+func (c *CreateIndexStatement) String() string {
+	if c.Unique {
+		return "CREATE UNIQUE INDEX"
+	}
+	return "CREATE INDEX"
+}
+func (c *CreateIndexStatement) statementNode() {}
+
+// IndexColumn represents a column in an index with optional sort direction
+type IndexColumn struct {
+	Column    *Identifier
+	Direction string // "ASC" or "DESC" or ""
+}
+
+// DROP INDEX statement
+type DropIndexStatement struct {
+	Drop     token.Pos
+	Name     *Identifier
+	IfExists bool
+}
+
+func (d *DropIndexStatement) Pos() token.Pos { return d.Drop }
+func (d *DropIndexStatement) End() token.Pos { return token.NoPos }
+func (d *DropIndexStatement) String() string { return "DROP INDEX" }
+func (d *DropIndexStatement) statementNode() {}
+
 // Expressions
 type Identifier struct {
 	Name string
@@ -200,6 +239,43 @@ func (b *BinaryExpression) String() string {
 	return b.Left.String() + " " + b.Operator + " " + b.Right.String()
 }
 func (b *BinaryExpression) expressionNode() {}
+
+// InExpression represents "expr IN (values)" or "expr NOT IN (values)"
+type InExpression struct {
+	Expr   Expression
+	Values []Expression
+	Not    bool
+	Pos_   token.Pos
+}
+
+func (i *InExpression) Pos() token.Pos { return i.Pos_ }
+func (i *InExpression) End() token.Pos { return token.NoPos }
+func (i *InExpression) String() string {
+	if i.Not {
+		return i.Expr.String() + " NOT IN (...)"
+	}
+	return i.Expr.String() + " IN (...)"
+}
+func (i *InExpression) expressionNode() {}
+
+// BetweenExpression represents "expr BETWEEN low AND high"
+type BetweenExpression struct {
+	Expr Expression
+	Low  Expression
+	High Expression
+	Not  bool
+	Pos_ token.Pos
+}
+
+func (b *BetweenExpression) Pos() token.Pos { return b.Pos_ }
+func (b *BetweenExpression) End() token.Pos { return token.NoPos }
+func (b *BetweenExpression) String() string {
+	if b.Not {
+		return b.Expr.String() + " NOT BETWEEN " + b.Low.String() + " AND " + b.High.String()
+	}
+	return b.Expr.String() + " BETWEEN " + b.Low.String() + " AND " + b.High.String()
+}
+func (b *BetweenExpression) expressionNode() {}
 
 type FunctionCall struct {
 	Name string

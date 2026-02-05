@@ -1070,3 +1070,599 @@ func TestNullLiteral(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		sql         string
+		indexName   string
+		tableName   string
+		unique      bool
+		ifNotExists bool
+		columns     []string
+		directions  []string
+	}{
+		{
+			name:       "simple create index",
+			sql:        "CREATE INDEX idx_name ON users (name)",
+			indexName:  "idx_name",
+			tableName:  "users",
+			unique:     false,
+			columns:    []string{"name"},
+			directions: []string{""},
+		},
+		{
+			name:       "create unique index",
+			sql:        "CREATE UNIQUE INDEX idx_email ON users (email)",
+			indexName:  "idx_email",
+			tableName:  "users",
+			unique:     true,
+			columns:    []string{"email"},
+			directions: []string{""},
+		},
+		{
+			name:        "create index if not exists",
+			sql:         "CREATE INDEX IF NOT EXISTS idx_age ON users (age)",
+			indexName:   "idx_age",
+			tableName:   "users",
+			ifNotExists: true,
+			columns:     []string{"age"},
+			directions:  []string{""},
+		},
+		{
+			name:        "create unique index if not exists",
+			sql:         "CREATE UNIQUE INDEX IF NOT EXISTS idx_phone ON users (phone)",
+			indexName:   "idx_phone",
+			tableName:   "users",
+			unique:      true,
+			ifNotExists: true,
+			columns:     []string{"phone"},
+			directions:  []string{""},
+		},
+		{
+			name:       "multi column index",
+			sql:        "CREATE INDEX idx_name_age ON users (name, age)",
+			indexName:  "idx_name_age",
+			tableName:  "users",
+			columns:    []string{"name", "age"},
+			directions: []string{"", ""},
+		},
+		{
+			name:       "index with asc direction",
+			sql:        "CREATE INDEX idx_name_asc ON users (name ASC)",
+			indexName:  "idx_name_asc",
+			tableName:  "users",
+			columns:    []string{"name"},
+			directions: []string{"ASC"},
+		},
+		{
+			name:       "index with desc direction",
+			sql:        "CREATE INDEX idx_name_desc ON users (name DESC)",
+			indexName:  "idx_name_desc",
+			tableName:  "users",
+			columns:    []string{"name"},
+			directions: []string{"DESC"},
+		},
+		{
+			name:       "multi column index with directions",
+			sql:        "CREATE INDEX idx_composite ON users (name ASC, age DESC)",
+			indexName:  "idx_composite",
+			tableName:  "users",
+			columns:    []string{"name", "age"},
+			directions: []string{"ASC", "DESC"},
+		},
+		{
+			name:       "multi column index with mixed directions",
+			sql:        "CREATE INDEX idx_mixed ON orders (customer_id, order_date DESC, amount ASC)",
+			indexName:  "idx_mixed",
+			tableName:  "orders",
+			columns:    []string{"customer_id", "order_date", "amount"},
+			directions: []string{"", "DESC", "ASC"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			createIdx, ok := stmt.(*CreateIndexStatement)
+			if !ok {
+				t.Fatalf("Expected CreateIndexStatement, got %T", stmt)
+			}
+
+			if createIdx.Name.Name != tt.indexName {
+				t.Errorf("Expected index name %q, got %q", tt.indexName, createIdx.Name.Name)
+			}
+
+			if createIdx.Table.Name != tt.tableName {
+				t.Errorf("Expected table name %q, got %q", tt.tableName, createIdx.Table.Name)
+			}
+
+			if createIdx.Unique != tt.unique {
+				t.Errorf("Expected unique=%v, got %v", tt.unique, createIdx.Unique)
+			}
+
+			if createIdx.IfNotExists != tt.ifNotExists {
+				t.Errorf("Expected ifNotExists=%v, got %v", tt.ifNotExists, createIdx.IfNotExists)
+			}
+
+			if len(createIdx.Columns) != len(tt.columns) {
+				t.Fatalf("Expected %d columns, got %d", len(tt.columns), len(createIdx.Columns))
+			}
+
+			for i, col := range createIdx.Columns {
+				if col.Column.Name != tt.columns[i] {
+					t.Errorf("Column %d: expected name %q, got %q", i, tt.columns[i], col.Column.Name)
+				}
+				if col.Direction != tt.directions[i] {
+					t.Errorf("Column %d: expected direction %q, got %q", i, tt.directions[i], col.Direction)
+				}
+			}
+		})
+	}
+
+	// Test String() method
+	t.Run("string method", func(t *testing.T) {
+		stmt, err := Parse("CREATE INDEX idx_test ON users (name)")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+		createIdx := stmt.(*CreateIndexStatement)
+		if createIdx.String() != "CREATE INDEX" {
+			t.Errorf("Expected 'CREATE INDEX', got %q", createIdx.String())
+		}
+
+		stmt2, err := Parse("CREATE UNIQUE INDEX idx_test ON users (name)")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+		createIdx2 := stmt2.(*CreateIndexStatement)
+		if createIdx2.String() != "CREATE UNIQUE INDEX" {
+			t.Errorf("Expected 'CREATE UNIQUE INDEX', got %q", createIdx2.String())
+		}
+	})
+}
+
+func TestDropIndex(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		indexName string
+		ifExists  bool
+	}{
+		{
+			name:      "simple drop index",
+			sql:       "DROP INDEX idx_name",
+			indexName: "idx_name",
+			ifExists:  false,
+		},
+		{
+			name:      "drop index if exists",
+			sql:       "DROP INDEX IF EXISTS idx_email",
+			indexName: "idx_email",
+			ifExists:  true,
+		},
+		{
+			name:      "drop index with underscore name",
+			sql:       "DROP INDEX idx_users_name_age",
+			indexName: "idx_users_name_age",
+			ifExists:  false,
+		},
+		{
+			name:      "drop index if exists complex name",
+			sql:       "DROP INDEX IF EXISTS idx_orders_customer_date",
+			indexName: "idx_orders_customer_date",
+			ifExists:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			dropIdx, ok := stmt.(*DropIndexStatement)
+			if !ok {
+				t.Fatalf("Expected DropIndexStatement, got %T", stmt)
+			}
+
+			if dropIdx.Name.Name != tt.indexName {
+				t.Errorf("Expected index name %q, got %q", tt.indexName, dropIdx.Name.Name)
+			}
+
+			if dropIdx.IfExists != tt.ifExists {
+				t.Errorf("Expected ifExists=%v, got %v", tt.ifExists, dropIdx.IfExists)
+			}
+		})
+	}
+
+	// Test String() method
+	t.Run("string method", func(t *testing.T) {
+		stmt, err := Parse("DROP INDEX idx_test")
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+		dropIdx := stmt.(*DropIndexStatement)
+		if dropIdx.String() != "DROP INDEX" {
+			t.Errorf("Expected 'DROP INDEX', got %q", dropIdx.String())
+		}
+	})
+}
+
+func TestSelectDistinct(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		distinct bool
+	}{
+		{
+			name:     "select without distinct",
+			sql:      "SELECT name FROM users",
+			distinct: false,
+		},
+		{
+			name:     "select distinct single column",
+			sql:      "SELECT DISTINCT name FROM users",
+			distinct: true,
+		},
+		{
+			name:     "select distinct multiple columns",
+			sql:      "SELECT DISTINCT name, email FROM users",
+			distinct: true,
+		},
+		{
+			name:     "select distinct with where",
+			sql:      "SELECT DISTINCT status FROM orders WHERE amount > 100",
+			distinct: true,
+		},
+		{
+			name:     "select distinct all columns",
+			sql:      "SELECT DISTINCT * FROM users",
+			distinct: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt, ok := stmt.(*SelectStatement)
+			if !ok {
+				t.Fatalf("Expected SelectStatement, got %T", stmt)
+			}
+
+			if selectStmt.Distinct != tt.distinct {
+				t.Errorf("Expected distinct=%v, got %v", tt.distinct, selectStmt.Distinct)
+			}
+		})
+	}
+}
+
+func TestLikeExpression(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		operator string
+	}{
+		{
+			name:     "simple like",
+			sql:      "SELECT * FROM users WHERE name LIKE '%John%'",
+			operator: "LIKE",
+		},
+		{
+			name:     "like with prefix",
+			sql:      "SELECT * FROM users WHERE email LIKE 'admin%'",
+			operator: "LIKE",
+		},
+		{
+			name:     "like with suffix",
+			sql:      "SELECT * FROM users WHERE name LIKE '%son'",
+			operator: "LIKE",
+		},
+		{
+			name:     "not like",
+			sql:      "SELECT * FROM users WHERE name NOT LIKE '%test%'",
+			operator: "NOT LIKE",
+		},
+		{
+			name:     "glob pattern",
+			sql:      "SELECT * FROM files WHERE path GLOB '*.txt'",
+			operator: "GLOB",
+		},
+		{
+			name:     "not glob",
+			sql:      "SELECT * FROM files WHERE path NOT GLOB '*.tmp'",
+			operator: "NOT GLOB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.Where == nil {
+				t.Fatal("Expected WHERE clause")
+			}
+
+			binExpr, ok := selectStmt.Where.(*BinaryExpression)
+			if !ok {
+				t.Fatalf("Expected BinaryExpression, got %T", selectStmt.Where)
+			}
+
+			if binExpr.Operator != tt.operator {
+				t.Errorf("Expected operator %q, got %q", tt.operator, binExpr.Operator)
+			}
+		})
+	}
+}
+
+func TestInExpression(t *testing.T) {
+	tests := []struct {
+		name       string
+		sql        string
+		not        bool
+		valueCount int
+	}{
+		{
+			name:       "in with numbers",
+			sql:        "SELECT * FROM users WHERE id IN (1, 2, 3)",
+			not:        false,
+			valueCount: 3,
+		},
+		{
+			name:       "in with single value",
+			sql:        "SELECT * FROM users WHERE status IN (1)",
+			not:        false,
+			valueCount: 1,
+		},
+		{
+			name:       "in with strings",
+			sql:        "SELECT * FROM users WHERE status IN ('active', 'pending', 'approved')",
+			not:        false,
+			valueCount: 3,
+		},
+		{
+			name:       "not in with numbers",
+			sql:        "SELECT * FROM users WHERE id NOT IN (1, 2, 3, 4, 5)",
+			not:        true,
+			valueCount: 5,
+		},
+		{
+			name:       "not in with strings",
+			sql:        "SELECT * FROM orders WHERE status NOT IN ('cancelled', 'refunded')",
+			not:        true,
+			valueCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.Where == nil {
+				t.Fatal("Expected WHERE clause")
+			}
+
+			inExpr, ok := selectStmt.Where.(*InExpression)
+			if !ok {
+				t.Fatalf("Expected InExpression, got %T", selectStmt.Where)
+			}
+
+			if inExpr.Not != tt.not {
+				t.Errorf("Expected not=%v, got %v", tt.not, inExpr.Not)
+			}
+
+			if len(inExpr.Values) != tt.valueCount {
+				t.Errorf("Expected %d values, got %d", tt.valueCount, len(inExpr.Values))
+			}
+		})
+	}
+
+	// Test String() method
+	t.Run("string method in", func(t *testing.T) {
+		stmt, _ := Parse("SELECT * FROM users WHERE id IN (1, 2)")
+		inExpr := stmt.(*SelectStatement).Where.(*InExpression)
+		if inExpr.String() != "id IN (...)" {
+			t.Errorf("Expected 'id IN (...)', got %q", inExpr.String())
+		}
+	})
+
+	t.Run("string method not in", func(t *testing.T) {
+		stmt, _ := Parse("SELECT * FROM users WHERE id NOT IN (1, 2)")
+		inExpr := stmt.(*SelectStatement).Where.(*InExpression)
+		if inExpr.String() != "id NOT IN (...)" {
+			t.Errorf("Expected 'id NOT IN (...)', got %q", inExpr.String())
+		}
+	})
+}
+
+func TestBetweenExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		not  bool
+	}{
+		{
+			name: "between with numbers",
+			sql:  "SELECT * FROM users WHERE age BETWEEN 20 AND 30",
+			not:  false,
+		},
+		{
+			name: "between with large range",
+			sql:  "SELECT * FROM products WHERE price BETWEEN 100 AND 1000",
+			not:  false,
+		},
+		{
+			name: "between with strings",
+			sql:  "SELECT * FROM users WHERE name BETWEEN 'A' AND 'M'",
+			not:  false,
+		},
+		{
+			name: "not between with numbers",
+			sql:  "SELECT * FROM users WHERE age NOT BETWEEN 18 AND 65",
+			not:  true,
+		},
+		{
+			name: "not between with dates",
+			sql:  "SELECT * FROM orders WHERE created_at NOT BETWEEN '2024-01-01' AND '2024-12-31'",
+			not:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if selectStmt.Where == nil {
+				t.Fatal("Expected WHERE clause")
+			}
+
+			betweenExpr, ok := selectStmt.Where.(*BetweenExpression)
+			if !ok {
+				t.Fatalf("Expected BetweenExpression, got %T", selectStmt.Where)
+			}
+
+			if betweenExpr.Not != tt.not {
+				t.Errorf("Expected not=%v, got %v", tt.not, betweenExpr.Not)
+			}
+
+			if betweenExpr.Low == nil {
+				t.Error("Expected Low value")
+			}
+
+			if betweenExpr.High == nil {
+				t.Error("Expected High value")
+			}
+		})
+	}
+
+	// Test String() method
+	t.Run("string method between", func(t *testing.T) {
+		stmt, _ := Parse("SELECT * FROM users WHERE age BETWEEN 20 AND 30")
+		betweenExpr := stmt.(*SelectStatement).Where.(*BetweenExpression)
+		expected := "age BETWEEN 20 AND 30"
+		if betweenExpr.String() != expected {
+			t.Errorf("Expected %q, got %q", expected, betweenExpr.String())
+		}
+	})
+
+	t.Run("string method not between", func(t *testing.T) {
+		stmt, _ := Parse("SELECT * FROM users WHERE age NOT BETWEEN 10 AND 20")
+		betweenExpr := stmt.(*SelectStatement).Where.(*BetweenExpression)
+		expected := "age NOT BETWEEN 10 AND 20"
+		if betweenExpr.String() != expected {
+			t.Errorf("Expected %q, got %q", expected, betweenExpr.String())
+		}
+	})
+}
+
+func TestRightJoin(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		joinType string
+	}{
+		{
+			name:     "right join",
+			sql:      "SELECT * FROM orders RIGHT JOIN users ON orders.user_id = users.id",
+			joinType: "RIGHT",
+		},
+		{
+			name:     "right outer join",
+			sql:      "SELECT * FROM orders RIGHT OUTER JOIN users ON orders.user_id = users.id",
+			joinType: "RIGHT",
+		},
+		{
+			name:     "right join with alias",
+			sql:      "SELECT * FROM orders o RIGHT JOIN users u ON o.user_id = u.id",
+			joinType: "RIGHT",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if len(selectStmt.Joins) == 0 {
+				t.Fatal("Expected at least one join")
+			}
+
+			join := selectStmt.Joins[0]
+			if join.Type != tt.joinType {
+				t.Errorf("Expected join type %q, got %q", tt.joinType, join.Type)
+			}
+		})
+	}
+}
+
+func TestFullOuterJoin(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		joinType string
+	}{
+		{
+			name:     "full join",
+			sql:      "SELECT * FROM users FULL JOIN orders ON users.id = orders.user_id",
+			joinType: "FULL",
+		},
+		{
+			name:     "full outer join",
+			sql:      "SELECT * FROM users FULL OUTER JOIN orders ON users.id = orders.user_id",
+			joinType: "FULL",
+		},
+		{
+			name:     "full join with alias",
+			sql:      "SELECT * FROM users u FULL JOIN orders o ON u.id = o.user_id",
+			joinType: "FULL",
+		},
+		{
+			name:     "full outer join with where",
+			sql:      "SELECT * FROM users FULL OUTER JOIN orders ON users.id = orders.user_id WHERE orders.amount > 100",
+			joinType: "FULL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			selectStmt := stmt.(*SelectStatement)
+			if len(selectStmt.Joins) == 0 {
+				t.Fatal("Expected at least one join")
+			}
+
+			join := selectStmt.Joins[0]
+			if join.Type != tt.joinType {
+				t.Errorf("Expected join type %q, got %q", tt.joinType, join.Type)
+			}
+		})
+	}
+}

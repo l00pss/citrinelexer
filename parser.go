@@ -52,6 +52,8 @@ func (p *Parser) ParseStatement() (Statement, error) {
 		return p.parseCommitStatement()
 	case ROLLBACK:
 		return p.parseRollbackStatement()
+	case DROP:
+		return p.parseDropStatement()
 	default:
 		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
 	}
@@ -64,6 +66,12 @@ func (p *Parser) parseSelectStatement() (*SelectStatement, error) {
 
 	if !p.expectToken(SELECT) {
 		return nil, fmt.Errorf("expected SELECT")
+	}
+
+	// Check for DISTINCT
+	if p.currentToken.Type == DISTINCT {
+		stmt.Distinct = true
+		p.nextToken()
 	}
 
 	fields, err := p.parseSelectFields()
@@ -167,17 +175,34 @@ func (p *Parser) parseSelectFields() ([]Expression, error) {
 	return fields, nil
 }
 
-func (p *Parser) parseCreateStatement() (*CreateTableStatement, error) {
-	stmt := &CreateTableStatement{
-		Create: token.Pos(p.currentToken.Col),
-	}
+func (p *Parser) parseCreateStatement() (Statement, error) {
+	pos := token.Pos(p.currentToken.Col)
 
 	if !p.expectToken(CREATE) {
 		return nil, fmt.Errorf("expected CREATE")
 	}
 
+	// Check for UNIQUE INDEX
+	if p.currentToken.Type == UNIQUE {
+		p.nextToken()
+		if p.currentToken.Type == INDEX {
+			return p.parseCreateIndexStatement(pos, true)
+		}
+		return nil, fmt.Errorf("expected INDEX after UNIQUE")
+	}
+
+	// Check for INDEX
+	if p.currentToken.Type == INDEX {
+		return p.parseCreateIndexStatement(pos, false)
+	}
+
+	// Parse CREATE TABLE
 	if !p.expectToken(TABLE) {
-		return nil, fmt.Errorf("expected TABLE")
+		return nil, fmt.Errorf("expected TABLE or INDEX")
+	}
+
+	stmt := &CreateTableStatement{
+		Create: pos,
 	}
 
 	if p.currentToken.Type != IDENTIFIER {
@@ -494,6 +519,152 @@ func (p *Parser) parseRollbackStatement() (*RollbackStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseCreateIndexStatement(pos token.Pos, unique bool) (*CreateIndexStatement, error) {
+	stmt := &CreateIndexStatement{
+		Create: pos,
+		Unique: unique,
+	}
+
+	if !p.expectToken(INDEX) {
+		return nil, fmt.Errorf("expected INDEX")
+	}
+
+	// Check for IF NOT EXISTS
+	if p.currentToken.Type == IF {
+		p.nextToken()
+		if !p.expectToken(NOT) {
+			return nil, fmt.Errorf("expected NOT after IF")
+		}
+		if !p.expectToken(EXISTS) {
+			return nil, fmt.Errorf("expected EXISTS after IF NOT")
+		}
+		stmt.IfNotExists = true
+	}
+
+	// Parse index name
+	if p.currentToken.Type != IDENTIFIER {
+		return nil, fmt.Errorf("expected index name")
+	}
+	stmt.Name = &Identifier{
+		Name: p.currentToken.Value,
+		Pos_: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken()
+
+	// Parse ON table_name
+	if !p.expectToken(ON) {
+		return nil, fmt.Errorf("expected ON")
+	}
+
+	if p.currentToken.Type != IDENTIFIER {
+		return nil, fmt.Errorf("expected table name")
+	}
+	stmt.Table = &Identifier{
+		Name: p.currentToken.Value,
+		Pos_: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken()
+
+	// Parse (column1 [ASC|DESC], column2 [ASC|DESC], ...)
+	if !p.expectToken(LPAREN) {
+		return nil, fmt.Errorf("expected (")
+	}
+
+	columns, err := p.parseIndexColumns()
+	if err != nil {
+		return nil, err
+	}
+	stmt.Columns = columns
+
+	if !p.expectToken(RPAREN) {
+		return nil, fmt.Errorf("expected )")
+	}
+
+	return stmt, nil
+}
+
+func (p *Parser) parseIndexColumns() ([]*IndexColumn, error) {
+	var columns []*IndexColumn
+
+	for p.currentToken.Type != RPAREN && p.currentToken.Type != EOF {
+		if p.currentToken.Type != IDENTIFIER {
+			return nil, fmt.Errorf("expected column name")
+		}
+
+		col := &IndexColumn{
+			Column: &Identifier{
+				Name: p.currentToken.Value,
+				Pos_: token.Pos(p.currentToken.Col),
+			},
+		}
+		p.nextToken()
+
+		// Check for ASC or DESC
+		if p.currentToken.Type == ASC {
+			col.Direction = "ASC"
+			p.nextToken()
+		} else if p.currentToken.Type == DESC {
+			col.Direction = "DESC"
+			p.nextToken()
+		}
+
+		columns = append(columns, col)
+
+		if p.currentToken.Type == COMMA {
+			p.nextToken()
+		} else {
+			break
+		}
+	}
+
+	return columns, nil
+}
+
+func (p *Parser) parseDropStatement() (Statement, error) {
+	pos := token.Pos(p.currentToken.Col)
+
+	if !p.expectToken(DROP) {
+		return nil, fmt.Errorf("expected DROP")
+	}
+
+	if p.currentToken.Type == INDEX {
+		return p.parseDropIndexStatement(pos)
+	}
+
+	return nil, fmt.Errorf("expected INDEX after DROP")
+}
+
+func (p *Parser) parseDropIndexStatement(pos token.Pos) (*DropIndexStatement, error) {
+	stmt := &DropIndexStatement{
+		Drop: pos,
+	}
+
+	if !p.expectToken(INDEX) {
+		return nil, fmt.Errorf("expected INDEX")
+	}
+
+	// Check for IF EXISTS
+	if p.currentToken.Type == IF {
+		p.nextToken()
+		if !p.expectToken(EXISTS) {
+			return nil, fmt.Errorf("expected EXISTS after IF")
+		}
+		stmt.IfExists = true
+	}
+
+	// Parse index name
+	if p.currentToken.Type != IDENTIFIER {
+		return nil, fmt.Errorf("expected index name")
+	}
+	stmt.Name = &Identifier{
+		Name: p.currentToken.Value,
+		Pos_: token.Pos(p.currentToken.Col),
+	}
+	p.nextToken()
+
+	return stmt, nil
+}
+
 func (p *Parser) parseExpression() (Expression, error) {
 	return p.parseComparison()
 }
@@ -504,9 +675,46 @@ func (p *Parser) parseComparison() (Expression, error) {
 		return nil, err
 	}
 
+	pos := token.Pos(p.currentToken.Col)
+
+	// Handle NOT IN, NOT BETWEEN, NOT LIKE
+	if p.currentToken.Type == NOT {
+		p.nextToken()
+		switch p.currentToken.Type {
+		case IN:
+			return p.parseInExpression(left, pos, true)
+		case BETWEEN:
+			return p.parseBetweenExpression(left, pos, true)
+		case LIKE, GLOB:
+			operator := "NOT " + p.currentToken.Value
+			p.nextToken()
+			right, err := p.parsePrimary()
+			if err != nil {
+				return nil, err
+			}
+			return &BinaryExpression{
+				Left:     left,
+				Operator: operator,
+				Right:    right,
+				Pos_:     pos,
+			}, nil
+		default:
+			return nil, fmt.Errorf("expected IN, BETWEEN, or LIKE after NOT")
+		}
+	}
+
+	// Handle IN
+	if p.currentToken.Type == IN {
+		return p.parseInExpression(left, pos, false)
+	}
+
+	// Handle BETWEEN
+	if p.currentToken.Type == BETWEEN {
+		return p.parseBetweenExpression(left, pos, false)
+	}
+
 	if p.isComparisonOperator() {
 		operator := p.currentToken.Value
-		pos := token.Pos(p.currentToken.Col)
 		p.nextToken()
 
 		right, err := p.parsePrimary()
@@ -523,6 +731,66 @@ func (p *Parser) parseComparison() (Expression, error) {
 	}
 
 	return left, nil
+}
+
+func (p *Parser) parseInExpression(left Expression, pos token.Pos, not bool) (*InExpression, error) {
+	p.nextToken() // skip IN
+
+	if !p.expectToken(LPAREN) {
+		return nil, fmt.Errorf("expected ( after IN")
+	}
+
+	var values []Expression
+	for p.currentToken.Type != RPAREN && p.currentToken.Type != EOF {
+		val, err := p.parsePrimary()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, val)
+
+		if p.currentToken.Type == COMMA {
+			p.nextToken()
+		} else {
+			break
+		}
+	}
+
+	if !p.expectToken(RPAREN) {
+		return nil, fmt.Errorf("expected ) after IN values")
+	}
+
+	return &InExpression{
+		Expr:   left,
+		Values: values,
+		Not:    not,
+		Pos_:   pos,
+	}, nil
+}
+
+func (p *Parser) parseBetweenExpression(left Expression, pos token.Pos, not bool) (*BetweenExpression, error) {
+	p.nextToken() // skip BETWEEN
+
+	low, err := p.parsePrimary()
+	if err != nil {
+		return nil, err
+	}
+
+	if !p.expectToken(AND) {
+		return nil, fmt.Errorf("expected AND in BETWEEN expression")
+	}
+
+	high, err := p.parsePrimary()
+	if err != nil {
+		return nil, err
+	}
+
+	return &BetweenExpression{
+		Expr: left,
+		Low:  low,
+		High: high,
+		Not:  not,
+		Pos_: pos,
+	}, nil
 }
 
 func (p *Parser) parsePrimary() (Expression, error) {
@@ -878,7 +1146,7 @@ func (p *Parser) isConstraintKeyword() bool {
 
 func (p *Parser) isComparisonOperator() bool {
 	switch p.currentToken.Type {
-	case EQUAL, NOT_EQUAL, NOT_EQUAL2, GREATER, LESS, GREATER_EQUAL, LESS_EQUAL, LIKE:
+	case EQUAL, NOT_EQUAL, NOT_EQUAL2, GREATER, LESS, GREATER_EQUAL, LESS_EQUAL, LIKE, GLOB:
 		return true
 	default:
 		return false
